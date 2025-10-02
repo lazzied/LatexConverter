@@ -24,7 +24,9 @@ def templateHeader(title, subject):
 \fancyhf{{}}
 \rhead{{{title}}}
 \rfoot{{\thepage}}
+
 \newcommand{{\fillblank}}[1][2cm]{{\underline{{\hspace{{#1}}}}}}
+
 \renewcommand{{\arraystretch}}{{1.4}}
 \setlength{{\extrarowheight}}{{2pt}}
 \allowdisplaybreaks[4]

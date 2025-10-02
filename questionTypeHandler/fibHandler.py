@@ -14,4 +14,4 @@ class fillInBlankQuestionHandler:
 
     # i want to keep it uniform acroos the other handlers, so this wrapper function will take a question 
     def fibWrapper(self, question:Question):
-            return f"\\item {question.Description}" + "\\fillblank"+ "\\"
+            return f"\item {question.Description}" + r"\fillblank"+ "\n"

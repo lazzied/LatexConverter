@@ -8,7 +8,7 @@ from questionTypeHandler.sectionsHandler import *
 from documentLayoutHandler.displayHandler import *
 from documentLayoutHandler.packagesHandler import *
 
-
+from testers.fixes import replace_simple
 
 
 
@@ -34,7 +34,7 @@ def handle_mc_section(section):
 
 
 def handle_fib_section(section):
-    latex = r'\section*{' + section.Header + r'}' + r'\n\\begin{enumerate}\n\\'
+    latex = r'\section*{' + section.Header + r'}' + r'\n\\begin{enumerate}\n'
     fibSection = FillInBlankSection(section)
     # fib is different from them since it's not complicated at all
     handler = fillInBlankQuestionHandler(section.Body)
@@ -76,7 +76,7 @@ def main():
     mathExam = Exam(filePath)
     mathExam.Title = "Mathematics Exam"
 
-    latexOutput = templateHeader(mathExam.Title, "Mathematics")
+    latexOutput=""
 
     examSplitter = examPartitioning(filePath)
     Sections = examSplitter.handleSections()
@@ -91,9 +91,12 @@ def main():
         else:
             latexOutput += handle_eq_section(section)
 
-    latexOutput += templateFooter()
-    latexOutput = latexOutput.replace(r"\n", "\n")
     
+    latexOutput = latexOutput.replace(r"\n", "\n")
+    latexOutput = replace_simple(latexOutput)
+    latexOutput =  templateHeader(mathExam.Title, "Mathematics") + latexOutput
+    latexOutput += templateFooter()
+
     with open("myfile.txt", "w", encoding="utf-8") as f:
         f.write(latexOutput)
 

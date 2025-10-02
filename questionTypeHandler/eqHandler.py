@@ -39,17 +39,17 @@ class EssayQuestionHandler:
     def eqHandler1(self):
         """Handles subquestions like (1), (2) ..."""
         pointsPattern = r'^(?:#+\s*\d+\.\s*)?\((\d+分)\)'
-        subQuestionPattern = r'(\d+)\)\s*(.*?)(?=\(\d+\)|$)'
+        subQuestionPattern = r'(?:\(|（)(\d+)(?:\)|）)\s*(.*?)(?=(?:\(|（)\d+(?:\)|）)|$)'
 
         subQuestions = re.findall(subQuestionPattern, self.text, flags=re.DOTALL)
 
         # Extract clean subquestions
-        subQuestionsList = [sq[1].strip().replace('\n', ' ') for sq in subQuestions]
+        subQuestionsList = [sq[1].strip() for sq in subQuestions]
 
-        # Build Question objects with Description instead of Text
+        # Build Question objects with Description
         subQuestionObjects = [Question(Description=sq) for sq in subQuestionsList]
 
-        # Remove subquestions from main description using regex
+        # Remove subquestions from main description
         questionDescription = re.sub(pointsPattern, '', self.text, flags=re.MULTILINE).strip()
         questionDescription = re.sub(subQuestionPattern, '', questionDescription, flags=re.DOTALL).strip()
 
@@ -63,25 +63,48 @@ class EssayQuestionHandler:
 
     def eqHandler2(self):
         """Handles subquestions with nested (i), (ii) ..."""
-        subQuestionPattern = r'(?ms)^(?:\(\d+\)|（\d+）)[\s\S]*?(?=^(?:\(\d+\)|（\d+）)|\Z)'
+        # Pattern to match main subquestions like (1), (2), （1）, （2）
+        subQuestionPattern = r'(?:^\((\d+)\)|^（(\d+）))(.*?)(?=^\(\d+\)|^（\d+）|$)'
+        
+        # Find all main subquestions
         subQuestions = re.findall(subQuestionPattern, self.text, flags=re.MULTILINE | re.DOTALL)
 
-        mainDescription = re.sub(subQuestionPattern, '', self.text).strip()
+        # Extract main description (text before first subquestion)
+        first_subq_match = re.search(r'^\((\d+)\)|^（(\d+）)', self.text, flags=re.MULTILINE)
+        if first_subq_match:
+            mainDescription = self.text[:first_subq_match.start()].strip()
+        else:
+            mainDescription = self.text.strip()
 
-        subsubPattern = r'^[ \t]*[\(（]([ivx]+)[\)）][ \t]*([\s\S]*?)(?=^[ \t]*[\(（][ivx]+[\)）]|\Z)'
+        # Pattern for sub-subquestions (i), (ii), (iii) or （i）, （ii）, （iii）
+        subsubPattern = r'^\s*[\(（]([ivxIVX]+)[\)）]\s*(.*?)(?=^\s*[\(（][ivxIVX]+[\)）]|$)'
 
         listOfSubquestions = []
-        for subq_text in subQuestions:
-            subq_obj = EssayQuestion(Description=subq_text.strip())
-
-            # Extract subsubquestions
-            subsubs = re.findall(subsubPattern, subq_text, flags=re.MULTILINE)
+        for subq_match in subQuestions:
+            # Get the text part (it's in the third capture group)
+            subq_text = subq_match[2].strip()
+            
+            # Check if this subquestion has sub-subquestions
+            subsubs = re.findall(subsubPattern, subq_text, flags=re.MULTILINE | re.DOTALL)
+            
             if subsubs:
+                # Remove sub-subquestions from main subquestion text
+                subq_desc = re.sub(subsubPattern, '', subq_text, flags=re.MULTILINE | re.DOTALL).strip()
+                
+                # Create EssayQuestion with nested questions
+                subq_obj = EssayQuestion(Description=subq_desc)
                 subq_obj.SubQuestions = [Question(Description=s[1].strip()) for s in subsubs]
+                listOfSubquestions.append(subq_obj)
             else:
-                subq_obj.SubQuestions = []
+                # No nested questions, just create a simple Question object
+                listOfSubquestions.append(Question(Description=subq_text))
 
-            listOfSubquestions.append(subq_obj)
+        print("Main question found:", mainDescription)
+        print(f"Found {len(listOfSubquestions)} subquestions")
+        for idx, sq in enumerate(listOfSubquestions, 1):
+            print(f"  ({idx}) {sq.Description[:50]}...")
+            if isinstance(sq, EssayQuestion) and sq.SubQuestions:
+                print(f"      -> Has {len(sq.SubQuestions)} nested sub-questions")
 
         return EssayQuestion(
             Description=mainDescription,
@@ -90,24 +113,24 @@ class EssayQuestionHandler:
 
     def identify_handler(self):
         """Auto-detect which handler to use"""
-        subSubQuestionIndexPattern = r'[\(（][ivxIVX]+[\)）]'
+        subSubQuestionIndexPattern = r'^\s*[\(（][ivxIVX]+[\)）]'
         if re.search(subSubQuestionIndexPattern, self.text, flags=re.MULTILINE):
             return self.eqHandler2
         else:
             return self.eqHandler1
+
     def eqWrapper(self, question: EssayQuestion):
         """
         Wrap an EssayQuestion into [description, LaTeX enumerate string]
         """
         latexLines = ["\\begin{enumerate}"]
-        
 
         for subq in question.SubQuestions:
             # Add main subquestion
             questionDesc = subq.Description
             latexLines.append(f"    \\item {questionDesc}")
 
-            # Add nested subsubquestions if any
+            # Add nested subsubquestions if they exist
             if isinstance(subq, EssayQuestion) and subq.SubQuestions:
                 latexLines.append("    \\begin{enumerate}")
                 for ss in subq.SubQuestions:
@@ -119,20 +142,44 @@ class EssayQuestionHandler:
         latexStr = "\n".join(latexLines)
         return [question.Description, latexStr]
 
-
     @staticmethod
     def tester():
+        """Test the handler identification and execution"""
         examples = [example1, example2]
         expected = ['eqHandler1', 'eqHandler2']
 
         for i, example in enumerate(examples, 1):
+            print(f"\n{'='*60}")
+            print(f"TESTING EXAMPLE {i}")
+            print('='*60)
+            
             testHandlerObject = EssayQuestionHandler(example)
             handler = testHandlerObject.identify_handler()
             handler_name = handler.__name__ if handler else None
-            result_obj = handler() if handler else None
-
-            print(f"Example {i}: Using {handler_name}")
+            
+            print(f"\nIdentified handler: {handler_name}")
+            
+            if handler:
+                try:
+                    result_obj = handler()
+                    print(f"\n✓ Handler executed successfully")
+                    
+                    # Test the wrapper
+                    wrapped = testHandlerObject.eqWrapper(result_obj)
+                    print(f"\nMain Description:\n{wrapped[0]}")
+                    print(f"\nLaTeX Output:\n{wrapped[1]}")
+                    
+                except Exception as e:
+                    print(f"\n✗ Handler execution failed: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
             if handler_name == expected[i - 1]:
-                print("✓ Correct")
+                print(f"\n✓ Correct handler identified")
             else:
-                print(f"✗ Expected {expected[i - 1]}")
+                print(f"\n✗ Expected {expected[i - 1]}, got {handler_name}")
+
+
+testExample= r"""
+
+"""
