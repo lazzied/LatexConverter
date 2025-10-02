@@ -1,0 +1,33 @@
+"""
+suggesting improvements:
+What’s a good compromise?
+
+Keep parsing logic separate (in handler/parser classes).
+
+Let Section classes use the correct handler internally, instead of duplicating regex logic.
+
+So something like this:
+
+class MultipleChoiceSection(Section):
+    def __init__(self, file, text, body, header, number):
+        super().__init__(file, text, body, header, number, SectionType.MCQ)
+
+    def parse_questions(self):
+        question_blocks = self.questionsSeperator(self.body)
+        for block in question_blocks:
+            handler = MultipleChoiceParser(block)   # your handler class
+            question = handler.identify_handler()()
+            self.add_question(question)
+
+
+This way:
+
+Section is responsible for orchestrating (“I need to parse my questions”).
+
+Handler is responsible for implementation details of parsing.
+
+✅ My recommendation:
+Don’t merge handlers into section classes — keep them separate, but let sections call handlers.
+Think of it like Django Models (data) and Forms (parsers/validators) — separation makes life easier.
+
+"""
